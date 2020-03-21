@@ -10,12 +10,11 @@
 
 void spawn_children(uint8_t num_children) {
   IPCIO ipcio = {.id = PARENT_ID, .num_children = num_children};
-  for (uint8_t i = 0; i < num_children + 1; ++i)
-    // todo: check errno
-    pipe((int*)&ipcio.pipes[i]);
+  // todo: check retval != -1
+  ipc_init(&ipcio);
 
   for (uint8_t i = 0; i < num_children; ++i) {
-    // todo: check retval == -1
+    // todo: check retval != -1
     if (fork() == 0) {
       // inside child process
       ipcio.id = PARENT_ID + 1 + i;

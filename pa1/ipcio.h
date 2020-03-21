@@ -12,8 +12,10 @@ typedef struct {
 typedef struct {
   local_id id;
   local_id num_children;
-  PipeDescriptor pipes[MAX_PROCESSES];
+  PipeDescriptor pipes[MAX_PROCESSES][MAX_PROCESSES];
 } IPCIO;
+
+int ipc_init(IPCIO* ipcio);
 
 int ipc_read(const IPCIO* ipcio, local_id from, void* buf, size_t len);
 
