@@ -18,4 +18,23 @@ void child_start(IPCIO ipcio) {
     exit(1);
   }
   printf(log_started_fmt, ipcio.id, getpid(), getppid());
+
+  for (local_id from = PARENT_ID + 1; from <= ipcio.num_children; ++from) {
+    if (from == ipcio.id)
+      continue;
+    if (receive(&ipcio, from, &msg) != 0) {
+      fprintf(stderr,
+              "Process %d failed to receive a message from process %d\n",
+              ipcio.id, from);
+      exit(1);
+    }
+    if (msg.s_header.s_type != STARTED) {
+      fprintf(stderr,
+              "Process %d received an unexpected message from process %d "
+              "(expected STARTED, got %d)\n",
+              ipcio.id, from, msg.s_header.s_type);
+      exit(1);
+    }
+  }
+  printf(log_received_all_started_fmt, ipcio.id);
 }
