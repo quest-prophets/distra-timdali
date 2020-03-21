@@ -23,7 +23,7 @@ int send_multicast(void* self, const Message* msg) {
   IPCIO* ipcio = (IPCIO*)self;
 
   int err = 0;
-  for (local_id dst = 0; dst < ipcio->num_children; ++dst)
+  for (local_id dst = 0; dst <= ipcio->num_children; ++dst)
     if ((err = send(self, dst, msg)) != 0)
       break;
 
@@ -33,7 +33,7 @@ int send_multicast(void* self, const Message* msg) {
 int receive_any(void* self, Message* msg) {
   IPCIO* ipcio = (IPCIO*)self;
 
-  for (local_id from = 0; from < ipcio->num_children; ++from)
+  for (local_id from = 0; from <= ipcio->num_children; ++from)
     if (receive(self, from, msg) == 0)
       return 0;
 

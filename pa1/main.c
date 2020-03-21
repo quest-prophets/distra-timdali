@@ -10,7 +10,7 @@
 
 void spawn_children(uint8_t num_children) {
   IPCIO ipcio = {.id = PARENT_ID, .num_children = num_children};
-  for (uint8_t i = 0; i < num_children; ++i)
+  for (uint8_t i = 0; i < num_children + 1; ++i)
     // todo: check errno
     pipe((int*)&ipcio.pipes[i]);
 
