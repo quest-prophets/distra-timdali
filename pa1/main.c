@@ -7,11 +7,13 @@
 
 #include "child.h"
 #include "ipcio.h"
+#include "log.h"
 
 void spawn_children(uint8_t num_children) {
   IPCIO ipcio = {.id = PARENT_ID, .num_children = num_children};
   // todo: check retval != -1
   ipc_init(&ipcio);
+  ipc_dump_descriptors(&ipcio, log_open_pipes());
 
   for (uint8_t i = 0; i < num_children; ++i) {
     // todo: check retval != -1
