@@ -13,7 +13,9 @@ void spawn_children(uint8_t num_children) {
   IPCIO ipcio = {.id = PARENT_ID, .num_children = num_children};
   // todo: check retval != -1
   ipc_init(&ipcio);
-  ipc_dump_descriptors(&ipcio, log_open_pipes());
+  log_init_pipes_log();
+  ipc_iterate_pipes(&ipcio, log_pipe);
+  log_close_pipes_log();
 
   for (uint8_t i = 0; i < num_children; ++i) {
     // todo: check retval != -1

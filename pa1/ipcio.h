@@ -23,4 +23,6 @@ int ipc_read(const IPCIO* ipcio, local_id from, void* buf, size_t len);
 
 int ipc_write(const IPCIO* ipcio, local_id dst, const void* buf, size_t len);
 
-void ipc_dump_descriptors(const IPCIO* ipcio, FILE* log_file);
+typedef void (*PipeIterator)(local_id dst, local_id from, int rd_fd, int wr_fd);
+
+void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback);

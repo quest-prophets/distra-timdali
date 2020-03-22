@@ -34,11 +34,10 @@ int ipc_write(const IPCIO* ipcio, local_id dst, const void* buf, size_t len) {
   return write(ipcio->pipes[dst][ipcio->id].write_fd, buf, len) != len;
 }
 
-void ipc_dump_descriptors(const IPCIO* ipcio, FILE* log_file) {
+void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback) {
   for (uint8_t dst = 0; dst <= ipcio->num_children; ++dst)
     for (uint8_t from = 0; from <= ipcio->num_children; ++from)
       if (ipcio->pipes[dst][from].read_fd != 0)
-        fprintf(log_file, "%d <- %d: r %d, w %d\n", dst, from,
-                ipcio->pipes[dst][from].read_fd,
-                ipcio->pipes[dst][from].write_fd);
+        callback(dst, from, ipcio->pipes[dst][from].read_fd,
+                 ipcio->pipes[dst][from].write_fd);
 }

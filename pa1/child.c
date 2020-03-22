@@ -17,14 +17,14 @@ void set_msg_payload(Message* msg, MessageType type, const char* fmt, ...) {
 }
 
 void child_start(IPCIO ipcio) {
-  FILE* log_file = log_open_events();
+  log_init_events_log();
   Message* msg = calloc(1, sizeof(Message));
   msg->s_header.s_magic = MESSAGE_MAGIC;
 
   set_msg_payload(msg, STARTED, log_started_fmt, ipcio.id, getpid(), getppid());
   if (send_multicast(&ipcio, msg) != 0)
     log_panic(ipcio.id, "failed to broadcast the STARTED message\n");
-  log_write(log_file, msg->s_payload);
+  log_event(msg->s_payload);
 
   for (local_id from = PARENT_ID + 1; from <= ipcio.num_children; ++from) {
     if (from == ipcio.id)
@@ -38,12 +38,12 @@ void child_start(IPCIO ipcio) {
                 "(expected STARTED, got %d)\n",
                 from, msg->s_header.s_type);
   }
-  log_print(log_file, log_received_all_started_fmt, ipcio.id);
+  log_eventf(log_received_all_started_fmt, ipcio.id);
 
   set_msg_payload(msg, DONE, log_done_fmt, ipcio.id);
   if (send_multicast(&ipcio, msg) != 0)
     log_panic(ipcio.id, "failed to broadcast the DONE message\n");
-  log_write(log_file, msg->s_payload);
+  log_event(msg->s_payload);
 
   for (local_id from = PARENT_ID + 1; from <= ipcio.num_children; ++from) {
     if (from == ipcio.id)
@@ -57,5 +57,5 @@ void child_start(IPCIO ipcio) {
                 "(expected DONE, got %d)\n",
                 from, msg->s_header.s_type);
   }
-  log_print(log_file, log_received_all_done_fmt, ipcio.id);
+  log_eventf(log_received_all_done_fmt, ipcio.id);
 }
