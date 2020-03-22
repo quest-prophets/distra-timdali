@@ -6,13 +6,15 @@
 #include <unistd.h>
 
 #include "child.h"
-#include "ipcio.h"
+#include "ipcext.h"
 #include "log.h"
 
 void spawn_children(uint8_t num_children) {
   IPCIO* ipcio = ipc_init_parent(num_children);
   if (ipcio == NULL)
     log_panic(PARENT_ID, "failed to initialize IPC state");
+
+  Message buf;
 
   log_init_pipes_log();
   ipc_iterate_pipes(ipcio, log_pipe);
@@ -23,10 +25,14 @@ void spawn_children(uint8_t num_children) {
     if (fork() == 0) {
       // inside child process
       ipc_init_child(ipcio, i);
-      child_entry(ipcio);
+      child_entry(ipcio, &buf);
       return;
     }
   }
+
+  log_init_events_log();
+  ipc_ext_await_all_started(ipcio, &buf);
+  ipc_ext_await_all_done(ipcio, &buf);
 
   for (uint8_t i = 0; i < num_children; ++i)
     wait(NULL);

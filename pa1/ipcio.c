@@ -124,7 +124,7 @@ int ipc_receive_all_next(IPCIO* ipcio, local_id* from, Message* buf) {
   *from += 1;
   if (*from == ipcio->id)
     *from += 1;
-  if (*from >= ipcio->num_children)
+  if (*from > ipcio->num_children)
     return RECEIVE_ALL_END;
 
   return receive(ipcio, *from, buf);
