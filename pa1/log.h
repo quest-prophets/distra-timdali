@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ipc.h"
-#include <stdio.h>
 
 void log_init_events_log();
 

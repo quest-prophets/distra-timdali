@@ -10,19 +10,20 @@
 #include "log.h"
 
 void spawn_children(uint8_t num_children) {
-  IPCIO ipcio = {.id = PARENT_ID, .num_children = num_children};
-  // todo: check retval != -1
-  ipc_init(&ipcio);
+  IPCIO* ipcio = ipc_init_parent(num_children);
+  if (ipcio == NULL)
+    log_panic(PARENT_ID, "failed to initialize IPC state");
+
   log_init_pipes_log();
-  ipc_iterate_pipes(&ipcio, log_pipe);
+  ipc_iterate_pipes(ipcio, log_pipe);
   log_close_pipes_log();
 
   for (uint8_t i = 0; i < num_children; ++i) {
     // todo: check retval != -1
     if (fork() == 0) {
       // inside child process
-      ipcio.id = PARENT_ID + 1 + i;
-      child_start(ipcio);
+      ipc_init_child(ipcio, i);
+      child_entry(ipcio);
       return;
     }
   }
