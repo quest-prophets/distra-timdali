@@ -21,12 +21,14 @@ void spawn_children(local_id num_children) {
   log_close_pipes_log();
 
   for (local_id i = 0; i < num_children; ++i) {
-    // todo: check retval != -1
-    if (fork() == 0) {
+    int fork_res = fork();
+    if (fork_res == 0) {
       // inside child process
       ipc_init_child(ipcio, i);
       child_entry(ipcio, &buf);
       return;
+    } else if (fork_res == -1) {
+      log_panic(PARENT_ID, "failed to create child process");
     }
   }
 
