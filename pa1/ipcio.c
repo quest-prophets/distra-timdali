@@ -79,6 +79,7 @@ IPCIO* ipc_init_parent(local_id num_children) {
 void ipc_init_child(IPCIO* ipcio, local_id child_id) {
   ipcio->id = PARENT_ID + 1 + child_id;
   // close unused pipes
+  // only leave pipes of type this->any for writing and any->this for reading
   for (local_id dst = PARENT_ID + 1; dst <= ipcio->num_children; ++dst) {
     for (local_id from = PARENT_ID + 1; from <= ipcio->num_children; ++from) {
       if (dst != ipcio->id) {
