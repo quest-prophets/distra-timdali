@@ -18,6 +18,7 @@ void ipc_ext_set_payload(Message* buf, MessageType type, const char* fmt, ...) {
   buf->s_header.s_type = type;
   buf->s_header.s_payload_len =
       vsnprintf(buf->s_payload, MAX_MESSAGE_LEN, fmt, args);
+  va_end(args);
 }
 
 void ipc_ext_receive_all_type(IPCIO* ipcio, Message* buf, MessageType type) {
