@@ -65,8 +65,8 @@ IPCIO* ipc_init_parent(local_id num_children) {
   ipcio->id = PARENT_ID;
   ipcio->num_children = num_children;
   // total number of processes = num_children + 1
-  for (uint8_t dst = 0; dst <= ipcio->num_children; ++dst) {
-    for (uint8_t from = 0; from <= ipcio->num_children; ++from) {
+  for (local_id dst = 0; dst <= ipcio->num_children; ++dst) {
+    for (local_id from = 0; from <= ipcio->num_children; ++from) {
       if (dst != from && pipe((int*)&ipcio->pipes[dst][from]) != 0) {
         free(ipcio);
         return NULL;
@@ -79,8 +79,8 @@ IPCIO* ipc_init_parent(local_id num_children) {
 void ipc_init_child(IPCIO* ipcio, local_id child_id) {
   ipcio->id = PARENT_ID + 1 + child_id;
   // close unused pipes
-  for (uint8_t dst = PARENT_ID + 1; dst <= ipcio->num_children; ++dst) {
-    for (uint8_t from = PARENT_ID + 1; from <= ipcio->num_children; ++from) {
+  for (local_id dst = PARENT_ID + 1; dst <= ipcio->num_children; ++dst) {
+    for (local_id from = PARENT_ID + 1; from <= ipcio->num_children; ++from) {
       if (dst != ipcio->id) {
         close(ipcio->pipes[dst][from].read_fd);
         ipcio->pipes[dst][from].read_fd = -1;
@@ -131,8 +131,8 @@ int ipc_receive_all_next(IPCIO* ipcio, local_id* from, Message* buf) {
 }
 
 void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback) {
-  for (uint8_t dst = 0; dst <= ipcio->num_children; ++dst)
-    for (uint8_t from = 0; from <= ipcio->num_children; ++from)
+  for (local_id dst = 0; dst <= ipcio->num_children; ++dst)
+    for (local_id from = 0; from <= ipcio->num_children; ++from)
       if (ipcio->pipes[dst][from].read_fd != 0)
         callback(dst, from, ipcio->pipes[dst][from].read_fd,
                  ipcio->pipes[dst][from].write_fd);

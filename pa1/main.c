@@ -9,7 +9,7 @@
 #include "ipcext.h"
 #include "log.h"
 
-void spawn_children(uint8_t num_children) {
+void spawn_children(local_id num_children) {
   IPCIO* ipcio = ipc_init_parent(num_children);
   if (ipcio == NULL)
     log_panic(PARENT_ID, "failed to initialize IPC state");
@@ -20,7 +20,7 @@ void spawn_children(uint8_t num_children) {
   ipc_iterate_pipes(ipcio, log_pipe);
   log_close_pipes_log();
 
-  for (uint8_t i = 0; i < num_children; ++i) {
+  for (local_id i = 0; i < num_children; ++i) {
     // todo: check retval != -1
     if (fork() == 0) {
       // inside child process
@@ -34,12 +34,12 @@ void spawn_children(uint8_t num_children) {
   ipc_ext_await_all_started(ipcio, &buf);
   ipc_ext_await_all_done(ipcio, &buf);
 
-  for (uint8_t i = 0; i < num_children; ++i)
+  for (local_id i = 0; i < num_children; ++i)
     wait(NULL);
 }
 
 int main(int argc, char** argv) {
-  uint8_t num_children = 0;
+  local_id num_children = 0;
 
   char opt;
   while ((opt = getopt(argc, argv, "p:")) != -1)
