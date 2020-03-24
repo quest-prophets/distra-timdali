@@ -9,8 +9,6 @@
 #include "pa1.h"
 
 void child_entry(IPCIO* ipcio, Message* buf) {
-  log_init_events_log();
-
   child_broadcast_started(ipcio, buf);
   ipc_ext_await_all_started(ipcio, buf);
 

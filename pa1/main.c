@@ -16,6 +16,7 @@ void spawn_children(local_id num_children) {
 
   Message buf;
 
+  log_init_events_log();
   log_init_pipes_log();
   ipc_iterate_pipes(ipcio, log_pipe);
   log_close_pipes_log();
@@ -32,7 +33,6 @@ void spawn_children(local_id num_children) {
     }
   }
 
-  log_init_events_log();
   ipc_ext_await_all_started(ipcio, &buf);
   ipc_ext_await_all_done(ipcio, &buf);
 
