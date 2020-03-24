@@ -60,7 +60,7 @@ local_id ipc_id(const IPCIO* ipcio) {
   return ipcio->id;
 }
 
-IPCIO* ipc_init_parent(local_id num_children) {
+IPCIO* ipc_init(local_id num_children) {
   IPCIO* ipcio = (IPCIO*)calloc(1, sizeof(IPCIO));
   ipcio->id = PARENT_ID;
   ipcio->num_children = num_children;
@@ -76,12 +76,10 @@ IPCIO* ipc_init_parent(local_id num_children) {
   return ipcio;
 }
 
-void ipc_init_child(IPCIO* ipcio, local_id child_id) {
-  ipcio->id = PARENT_ID + 1 + child_id;
-  // close unused pipes
+void _close_unused_pipes(IPCIO* ipcio) {
   // only leave pipes of type this->any for writing and any->this for reading
-  for (local_id dst = PARENT_ID + 1; dst <= ipcio->num_children; ++dst) {
-    for (local_id from = PARENT_ID + 1; from <= ipcio->num_children; ++from) {
+  for (local_id dst = 0; dst <= ipcio->num_children; ++dst) {
+    for (local_id from = 0; from <= ipcio->num_children; ++from) {
       if (dst != ipcio->id) {
         close(ipcio->pipes[dst][from].read_fd);
         ipcio->pipes[dst][from].read_fd = -1;
@@ -92,6 +90,15 @@ void ipc_init_child(IPCIO* ipcio, local_id child_id) {
       }
     }
   }
+}
+
+void ipc_set_up_child(IPCIO* ipcio, local_id child_id) {
+  ipcio->id = PARENT_ID + 1 + child_id;
+  _close_unused_pipes(ipcio);
+}
+
+void ipc_set_up_parent(IPCIO* ipcio) {
+  _close_unused_pipes(ipcio);
 }
 
 int ipc_read(const IPCIO* ipcio, local_id from, void* buf, size_t len) {

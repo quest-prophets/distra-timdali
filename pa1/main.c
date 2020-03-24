@@ -10,7 +10,7 @@
 #include "log.h"
 
 void spawn_children(local_id num_children) {
-  IPCIO* ipcio = ipc_init_parent(num_children);
+  IPCIO* ipcio = ipc_init(num_children);
   if (ipcio == NULL)
     log_panic(PARENT_ID, "failed to initialize IPC state");
 
@@ -25,7 +25,7 @@ void spawn_children(local_id num_children) {
     int fork_res = fork();
     if (fork_res == 0) {
       // inside child process
-      ipc_init_child(ipcio, i);
+      ipc_set_up_child(ipcio, i);
       child_entry(ipcio, &buf);
       return;
     } else if (fork_res == -1) {
@@ -33,6 +33,7 @@ void spawn_children(local_id num_children) {
     }
   }
 
+  ipc_set_up_parent(ipcio);
   ipc_ext_await_all_started(ipcio, &buf);
   ipc_ext_await_all_done(ipcio, &buf);
 

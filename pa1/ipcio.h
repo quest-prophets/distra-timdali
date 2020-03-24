@@ -9,9 +9,11 @@ typedef struct IPCIO IPCIO;
 
 local_id ipc_id(const IPCIO* ipcio);
 
-IPCIO* ipc_init_parent(local_id num_children);
+IPCIO* ipc_init(local_id num_children);
 
-void ipc_init_child(IPCIO* ipcio, local_id child_id);
+void ipc_set_up_child(IPCIO* ipcio, local_id child_id);
+
+void ipc_set_up_parent(IPCIO* ipcio);
 
 int ipc_read(const IPCIO* ipcio, local_id from, void* buf, size_t len);
 
