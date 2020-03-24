@@ -80,6 +80,8 @@ void _close_unused_pipes(IPCIO* ipcio) {
   // only leave pipes of type this->any for writing and any->this for reading
   for (local_id dst = 0; dst <= ipcio->num_children; ++dst) {
     for (local_id from = 0; from <= ipcio->num_children; ++from) {
+      if (dst == from)
+        continue;
       if (dst != ipcio->id) {
         close(ipcio->pipes[dst][from].read_fd);
         ipcio->pipes[dst][from].read_fd = -1;
