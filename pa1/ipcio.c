@@ -1,5 +1,7 @@
 #include "ipcio.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -76,6 +78,22 @@ IPCIO* ipc_init(local_id num_children) {
   return ipcio;
 }
 
+void ipc_use_nonblocking_io(IPCIO* ipcio) {
+  for (local_id dst = 0; dst <= ipcio->num_children; ++dst) {
+    for (local_id from = 0; from <= ipcio->num_children; ++from) {
+      PipeDescriptor pipe = ipcio->pipes[dst][from];
+      if (pipe.read_fd > 0) {
+        int flags = fcntl(pipe.read_fd, F_GETFL, 0);
+        fcntl(pipe.read_fd, F_SETFL, flags | O_NONBLOCK);
+      }
+      if (pipe.write_fd > 0) {
+        int flags = fcntl(pipe.write_fd, F_GETFL, 0);
+        fcntl(pipe.write_fd, F_SETFL, flags | O_NONBLOCK);
+      }
+    }
+  }
+}
+
 void _close_unused_pipes(IPCIO* ipcio) {
   // only leave pipes of type this->any for writing and any->this for reading
   for (local_id dst = 0; dst <= ipcio->num_children; ++dst) {
@@ -111,11 +129,20 @@ int ipc_read(const IPCIO* ipcio, local_id from, void* buf, size_t len) {
 
   size_t total_read = 0;
   while (total_read < len) {
+    errno = 0;
     ssize_t rd;
-    if ((rd = read(fd, buf, len - total_read)) < 0)
-      return -1;
+    if ((rd = read(fd, buf, len - total_read)) < 0) {
+      if (errno == EAGAIN)
+        if (total_read > 0)
+          continue;  // block until we read the entire response
+        else
+          return IPC_ERR_NONBLOCK_EMPTY;
+      else if (errno != 0)
+        return -1;
+    }
     total_read += rd;
   }
+
   return 0;
 }
 
@@ -137,7 +164,7 @@ int ipc_receive_all_next(IPCIO* ipcio, local_id* from, Message* buf) {
   if (*from > ipcio->num_children)
     return RECEIVE_ALL_END;
 
-  return receive(ipcio, *from, buf);
+  return receive_blocking(ipcio, *from, buf);
 }
 
 void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback) {
@@ -146,4 +173,10 @@ void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback) {
       if (ipcio->pipes[dst][from].read_fd != 0)
         callback(dst, from, ipcio->pipes[dst][from].read_fd,
                  ipcio->pipes[dst][from].write_fd);
+}
+
+int receive_blocking(IPCIO* ipcio, local_id from, Message* buf) {
+  int err;
+  while ((err = receive(ipcio, from, buf)) == IPC_ERR_NONBLOCK_EMPTY);
+  return err;
 }

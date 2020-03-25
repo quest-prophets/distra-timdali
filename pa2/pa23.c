@@ -1,10 +1,10 @@
 #define _POSIX_C_SOURCE 200809L
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <assert.h>
 
 #include "banking.h"
 #include "ipcext.h"
@@ -24,7 +24,7 @@ void transfer(void* parent_data, local_id src, local_id dst, balance_t amount) {
       (TransferOrder){.s_src = src, .s_dst = dst, .s_amount = amount};
 
   send(ipcio, src, buf);
-  receive(ipcio, dst, buf);
+  receive_blocking(ipcio, dst, buf);
   assert(buf->s_header.s_type == ACK);
 
   free(buf);
@@ -33,7 +33,7 @@ void transfer(void* parent_data, local_id src, local_id dst, balance_t amount) {
 void parent_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
   ipc_ext_await_all_started(ipcio, buf);
 
-  bank_robbery(ipcio, num_children + 1);
+  bank_robbery(ipcio, num_children);
 
   ipc_ext_set_status(buf, STOP);
   if (send_multicast(ipcio, buf) != 0)
@@ -64,8 +64,7 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
           balance -= transfer->s_amount;
 
           send(ipcio, transfer->s_dst, buf);
-        }
-        else if (transfer->s_dst == ipc_id(ipcio)) {
+        } else if (transfer->s_dst == ipc_id(ipcio)) {
           balance += transfer->s_amount;
 
           buf->s_header.s_type = ACK;
@@ -86,6 +85,8 @@ void start(local_id num_children, balance_t* start_balances) {
   IPCIO* ipcio = ipc_init(num_children);
   if (ipcio == NULL)
     log_panic(PARENT_ID, "failed to initialize IPC state");
+
+  ipc_use_nonblocking_io(ipcio);
 
   Message buf;
 
