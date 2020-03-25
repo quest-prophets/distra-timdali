@@ -5,20 +5,55 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "pa2345.h"
 #include "banking.h"
 #include "ipcext.h"
 #include "log.h"
 
 void transfer(void* parent_data, local_id src, local_id dst, balance_t amount) {
+  IPCIO* ipcio = (IPCIO*)parent_data;
+
   // student, please implement me
 }
 
-void client_process_do_work(IPCIO* ipcio, Message* buf) {
-  // bank_robbery(parent_data);
-  // print_history(all);
+void parent_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
+  ipc_ext_await_all_started(ipcio, buf);
+
+  bank_robbery(ipcio, num_children + 1);
+
+  ipc_ext_set_status(buf, STOP);
+  if (send_multicast(ipcio, buf) != 0)
+    log_panic(ipc_id(ipcio), "failed to broadcast the STOP message\n");
+
+  ipc_ext_await_all_done(ipcio, buf);
+
+  AllHistory history = {.s_history_len = num_children};
+  // TODO: fill history with BALANCE_HISTORY from each child process
+
+  print_history(&history);
 }
 
-void start(local_id num_children) {
+void child_entry(IPCIO* ipcio, Message* buf, balance_t init_balance) {
+  ipc_ext_set_payload(buf, STARTED, log_started_fmt, 0, ipc_id(ipcio), getpid(),
+                      getppid(), init_balance);
+  if (send_multicast(ipcio, buf) != 0)
+    log_panic(ipc_id(ipcio), "failed to broadcast the STARTED message\n");
+  log_event(buf->s_payload);
+
+  while (1) {
+    if (receive_any(ipcio, buf) == 0) {
+      if (buf->s_header.s_type == STOP)
+        break;
+    }
+  }
+
+  ipc_ext_set_payload(buf, DONE, log_received_all_done_fmt, 0, ipc_id(ipcio));
+  if (send_multicast(ipcio, buf) != 0)
+    log_panic(ipc_id(ipcio), "failed to broadcast the DONE message\n");
+  log_event(buf->s_payload);
+}
+
+void start(local_id num_children, balance_t *start_balances) {
   IPCIO* ipcio = ipc_init(num_children);
   if (ipcio == NULL)
     log_panic(PARENT_ID, "failed to initialize IPC state");
@@ -35,7 +70,7 @@ void start(local_id num_children) {
     if (fork_res == 0) {
       // inside child process
       ipc_set_up_child(ipcio, i);
-      // ???
+      child_entry(ipcio, &buf, start_balances[i]);
       return;
     } else if (fork_res == -1) {
       log_panic(PARENT_ID, "failed to create child process");
@@ -43,18 +78,15 @@ void start(local_id num_children) {
   }
 
   ipc_set_up_parent(ipcio);
-  ipc_ext_await_all_started(ipcio, &buf);
-
-  client_process_do_work(ipcio, &buf);
-
-  ipc_ext_await_all_done(ipcio, &buf);
-
+  parent_entry(ipcio, &buf, num_children);
+  // wait for child processes to exit
   for (local_id i = 0; i < num_children; ++i)
     wait(NULL);
 }
 
 int main(int argc, char** argv) {
   local_id nchildren = 0;
+  balance_t start_balances[MAX_PROCESS_ID + 1];
 
   char opt;
   while ((opt = getopt(argc, argv, "p:")) != -1)
@@ -71,6 +103,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  start(nchildren);
+  for (local_id child = 0; child < nchildren; ++child)
+    start_balances[child] = strtoul(argv[optind++], NULL, 10);
+
+  start(nchildren, start_balances);
   return 0;
 }

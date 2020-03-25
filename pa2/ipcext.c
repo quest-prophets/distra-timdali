@@ -11,11 +11,15 @@ static char* MESSAGE_TYPE_STR[] = {"STARTED",    "DONE",     "ACK",
 static size_t MESSAGE_TYPE_CNT =
     sizeof(MESSAGE_TYPE_STR) / sizeof(MESSAGE_TYPE_STR[0]);
 
+void ipc_ext_set_status(Message* buf, MessageType type) {
+  buf->s_header.s_magic = MESSAGE_MAGIC;
+  buf->s_header.s_type = type;
+}
+
 void ipc_ext_set_payload(Message* buf, MessageType type, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  buf->s_header.s_magic = MESSAGE_MAGIC;
-  buf->s_header.s_type = type;
+  ipc_ext_set_status(buf, type);
   buf->s_header.s_payload_len =
       vsnprintf(buf->s_payload, MAX_MESSAGE_LEN, fmt, args);
   va_end(args);
