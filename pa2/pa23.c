@@ -4,16 +4,30 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <assert.h>
 
-#include "pa2345.h"
 #include "banking.h"
 #include "ipcext.h"
 #include "log.h"
+#include "pa2345.h"
 
 void transfer(void* parent_data, local_id src, local_id dst, balance_t amount) {
   IPCIO* ipcio = (IPCIO*)parent_data;
 
-  // student, please implement me
+  Message* buf = malloc(sizeof(Message));
+
+  buf->s_header.s_magic = MESSAGE_MAGIC;
+  buf->s_header.s_type = TRANSFER;
+  buf->s_header.s_payload_len = sizeof(TransferOrder);
+  buf->s_header.s_local_time = get_physical_time();
+  *((TransferOrder*)buf->s_payload) =
+      (TransferOrder){.s_src = src, .s_dst = dst, .s_amount = amount};
+
+  send(ipcio, src, buf);
+  receive(ipcio, dst, buf);
+  assert(buf->s_header.s_type == ACK);
+
+  free(buf);
 }
 
 void parent_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
@@ -33,9 +47,9 @@ void parent_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
   print_history(&history);
 }
 
-void child_entry(IPCIO* ipcio, Message* buf, balance_t init_balance) {
+void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
   ipc_ext_set_payload(buf, STARTED, log_started_fmt, 0, ipc_id(ipcio), getpid(),
-                      getppid(), init_balance);
+                      getppid(), balance);
   if (send_multicast(ipcio, buf) != 0)
     log_panic(ipc_id(ipcio), "failed to broadcast the STARTED message\n");
   log_event(buf->s_payload);
@@ -44,6 +58,21 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t init_balance) {
     if (receive_any(ipcio, buf) == 0) {
       if (buf->s_header.s_type == STOP)
         break;
+      if (buf->s_header.s_type == TRANSFER) {
+        TransferOrder* transfer = (TransferOrder*)buf->s_payload;
+        if (transfer->s_src == ipc_id(ipcio)) {
+          balance -= transfer->s_amount;
+
+          send(ipcio, transfer->s_dst, buf);
+        }
+        else if (transfer->s_dst == ipc_id(ipcio)) {
+          balance += transfer->s_amount;
+
+          buf->s_header.s_type = ACK;
+          buf->s_header.s_payload_len = 0;
+          send(ipcio, PARENT_ID, buf);
+        }
+      }
     }
   }
 
@@ -53,7 +82,7 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t init_balance) {
   log_event(buf->s_payload);
 }
 
-void start(local_id num_children, balance_t *start_balances) {
+void start(local_id num_children, balance_t* start_balances) {
   IPCIO* ipcio = ipc_init(num_children);
   if (ipcio == NULL)
     log_panic(PARENT_ID, "failed to initialize IPC state");
