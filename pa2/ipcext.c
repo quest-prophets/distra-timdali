@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+#include "banking.h"
 #include "log.h"
 #include "pa2345.h"
 
@@ -58,10 +59,10 @@ void ipc_ext_receive_all(IPCIO* ipcio,
 
 void ipc_ext_await_all_started(IPCIO* ipcio, Message* buf) {
   ipc_ext_receive_all_type(ipcio, buf, STARTED);
-  log_eventf(log_received_all_started_fmt, ipc_id(ipcio));
+  log_eventf(log_received_all_started_fmt, get_physical_time(), ipc_id(ipcio));
 }
 
 void ipc_ext_await_all_done(IPCIO* ipcio, Message* buf) {
   ipc_ext_receive_all_type(ipcio, buf, DONE);
-  log_eventf(log_received_all_done_fmt, ipc_id(ipcio));
+  log_eventf(log_received_all_done_fmt, get_physical_time(), ipc_id(ipcio));
 }
