@@ -67,17 +67,18 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
 
   while (1) {
     if (receive_any(ipcio, buf) == 0) {
+      // fill in the missing balance history entries
+      timestamp_t recv_time = get_physical_time();
+      for (timestamp_t t = history.s_history_len; t < recv_time; ++t) {
+        history.s_history[t] = (BalanceState){
+            .s_balance = balance, .s_time = t, .s_balance_pending_in = 0};
+        history.s_history_len++;
+      }
+
       if (buf->s_header.s_type == STOP)
         break;
       if (buf->s_header.s_type == TRANSFER) {
         TransferOrder* transfer = (TransferOrder*)buf->s_payload;
-        timestamp_t recv_time = get_physical_time();
-
-        for (timestamp_t t = history.s_history_len; t < recv_time; ++t) {
-          history.s_history[t] = (BalanceState){
-              .s_balance = balance, .s_time = t, .s_balance_pending_in = 0};
-          history.s_history_len++;
-        }
 
         if (transfer->s_src == ipc_id(ipcio)) {
           balance -= transfer->s_amount;
@@ -90,12 +91,6 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
           buf->s_header.s_payload_len = 0;
           send(ipcio, PARENT_ID, buf);
         }
-
-        history.s_history[recv_time] =
-            (BalanceState){.s_balance = balance,
-                           .s_time = recv_time,
-                           .s_balance_pending_in = 0};
-        history.s_history_len++;
       }
     }
   }
