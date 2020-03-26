@@ -37,5 +37,5 @@ void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback);
 
 #define IPC_ERR_NONBLOCK_EMPTY (-128)
 
-// Equivalent to receive() when using blocking IO (PA1)
+// Equivalent to recieve() when using blocking IO (PA1)
 int receive_blocking(IPCIO* ipcio, local_id from, Message* buf);

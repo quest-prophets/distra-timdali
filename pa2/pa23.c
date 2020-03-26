@@ -30,6 +30,13 @@ void transfer(void* parent_data, local_id src, local_id dst, balance_t amount) {
   free(buf);
 }
 
+void parent_fill_history_callback(void* hist_ptr, local_id from, Message* buf) {
+  AllHistory* history = (AllHistory*)hist_ptr;
+  assert(history->s_history_len == from - 1);
+  history->s_history[from - 1] = *((BalanceHistory*)buf->s_payload);
+  history->s_history_len++;
+}
+
 void parent_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
   ipc_ext_await_all_started(ipcio, buf);
 
@@ -41,9 +48,9 @@ void parent_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
 
   ipc_ext_await_all_done(ipcio, buf);
 
-  AllHistory history = {.s_history_len = num_children};
-  // TODO: fill history with BALANCE_HISTORY from each child process
-
+  AllHistory history = {.s_history_len = 0};
+  ipc_ext_receive_all(ipcio, buf, BALANCE_HISTORY, &history,
+                      parent_fill_history_callback);
   print_history(&history);
 }
 
@@ -54,12 +61,24 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
     log_panic(ipc_id(ipcio), "failed to broadcast the STARTED message\n");
   log_event(buf->s_payload);
 
+  BalanceHistory history = {.s_id = ipc_id(ipcio), .s_history_len = 1};
+  history.s_history[0] = (BalanceState){
+      .s_balance = balance, .s_time = 0, .s_balance_pending_in = 0};
+
   while (1) {
     if (receive_any(ipcio, buf) == 0) {
       if (buf->s_header.s_type == STOP)
         break;
       if (buf->s_header.s_type == TRANSFER) {
         TransferOrder* transfer = (TransferOrder*)buf->s_payload;
+        timestamp_t recv_time = get_physical_time();
+
+        for (timestamp_t t = history.s_history_len; t < recv_time; ++t) {
+          history.s_history[t] = (BalanceState){
+              .s_balance = balance, .s_time = t, .s_balance_pending_in = 0};
+          history.s_history_len++;
+        }
+
         if (transfer->s_src == ipc_id(ipcio)) {
           balance -= transfer->s_amount;
 
@@ -71,6 +90,12 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
           buf->s_header.s_payload_len = 0;
           send(ipcio, PARENT_ID, buf);
         }
+
+        history.s_history[recv_time] =
+            (BalanceState){.s_balance = balance,
+                           .s_time = recv_time,
+                           .s_balance_pending_in = 0};
+        history.s_history_len++;
       }
     }
   }
@@ -79,6 +104,13 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
   if (send_multicast(ipcio, buf) != 0)
     log_panic(ipc_id(ipcio), "failed to broadcast the DONE message\n");
   log_event(buf->s_payload);
+
+  ipc_ext_await_all_done(ipcio, buf);
+
+  buf->s_header.s_type = BALANCE_HISTORY;
+  buf->s_header.s_payload_len = sizeof(BalanceHistory);
+  *((BalanceHistory*)buf->s_payload) = history;
+  send(ipcio, PARENT_ID, buf);
 }
 
 void start(local_id num_children, balance_t* start_balances) {
@@ -109,6 +141,7 @@ void start(local_id num_children, balance_t* start_balances) {
 
   ipc_set_up_parent(ipcio);
   parent_entry(ipcio, &buf, num_children);
+
   // wait for child processes to exit
   for (local_id i = 0; i < num_children; ++i)
     wait(NULL);

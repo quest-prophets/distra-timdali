@@ -26,6 +26,14 @@ void ipc_ext_set_payload(Message* buf, MessageType type, const char* fmt, ...) {
 }
 
 void ipc_ext_receive_all_type(IPCIO* ipcio, Message* buf, MessageType type) {
+  ipc_ext_receive_all(ipcio, buf, type, NULL, NULL);
+}
+
+void ipc_ext_receive_all(IPCIO* ipcio,
+                         Message* buf,
+                         MessageType type,
+                         void* callback_data,
+                         void (*callback)(void*, local_id, Message*)) {
   local_id from;
   int err;
 
@@ -42,6 +50,9 @@ void ipc_ext_receive_all_type(IPCIO* ipcio, Message* buf, MessageType type) {
                 from, type, MESSAGE_TYPE_STR[type], buf_type,
                 buf_type < MESSAGE_TYPE_CNT ? MESSAGE_TYPE_STR[buf_type]
                                             : "<unknown>");
+
+    if (callback != NULL)
+      callback(callback_data, from, buf);
   }
 }
 

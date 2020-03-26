@@ -177,6 +177,7 @@ void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback) {
 
 int receive_blocking(IPCIO* ipcio, local_id from, Message* buf) {
   int err;
-  while ((err = receive(ipcio, from, buf)) == IPC_ERR_NONBLOCK_EMPTY);
+  while ((err = receive(ipcio, from, buf)) == IPC_ERR_NONBLOCK_EMPTY)
+    ;
   return err;
 }
