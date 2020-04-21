@@ -1,47 +1,54 @@
 #include "child.h"
 
+#include <stdio.h>
 #include <unistd.h>
 
 #include "log.h"
 #include "pa2345.h"
+#include "time.h"
+
+void record_history(BalanceHistory* history, BalanceState balance_state) {
+  history->s_history[balance_state.s_time] = balance_state;
+  history->s_history_len++;
+}
 
 void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
   BalanceHistory history = {.s_id = ipc_id(ipcio), .s_history_len = 1};
-  history.s_history[0] = (BalanceState){
-      .s_balance = balance, .s_time = 0, .s_balance_pending_in = 0};
+  history.s_history[0] =
+      (BalanceState){.s_balance = balance, .s_time = 0, .s_balance_pending_in = 0};
 
   child_sync_started(ipcio, buf, balance);
 
   while (1) {
     if (receive_any(ipcio, buf) == 0) {
       // fill in the missing balance history entries
-      timestamp_t recv_t = get_physical_time();
-      for (timestamp_t t = history.s_history_len; t < recv_t; ++t) {
-        history.s_history[t] = (BalanceState){
-            .s_balance = balance, .s_time = t, .s_balance_pending_in = 0};
-        history.s_history_len++;
-      }
+      synchronize_time(buf->s_header.s_local_time);
+      timestamp_t recv_t = get_lamport_time();
+      for (timestamp_t t = history.s_history_len; t < recv_t; ++t)
+        record_history(
+            &history, (BalanceState){.s_balance = balance, .s_time = t, .s_balance_pending_in = 0});
 
       if (buf->s_header.s_type == STOP) {
-        // insert the final balance entry
-        history.s_history[recv_t] = (BalanceState){
-            .s_balance = balance, .s_time = recv_t, .s_balance_pending_in = 0};
-        history.s_history_len++;
         break;
       }
       if (buf->s_header.s_type == TRANSFER) {
         TransferOrder* transfer = (TransferOrder*)buf->s_payload;
+        advance_lamport_time();
+        buf->s_header.s_local_time = get_lamport_time();
 
         if (transfer->s_src == ipc_id(ipcio)) {
           balance -= transfer->s_amount;
-          log_eventf(log_transfer_out_fmt, recv_t, transfer->s_src,
-                     transfer->s_amount, transfer->s_dst);
+          record_history(&history, (BalanceState){.s_balance = balance,
+                                                  .s_time = recv_t,
+                                                  .s_balance_pending_in = transfer->s_amount});
+          log_eventf(log_transfer_out_fmt, recv_t, transfer->s_src, transfer->s_amount,
+                     transfer->s_dst);
 
           send(ipcio, transfer->s_dst, buf);
         } else if (transfer->s_dst == ipc_id(ipcio)) {
           balance += transfer->s_amount;
-          log_eventf(log_transfer_in_fmt, recv_t, transfer->s_dst,
-                     transfer->s_amount, transfer->s_src);
+          log_eventf(log_transfer_in_fmt, recv_t, transfer->s_dst, transfer->s_amount,
+                     transfer->s_src);
 
           buf->s_header.s_type = ACK;
           buf->s_header.s_payload_len = 0;
@@ -52,7 +59,11 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
   }
 
   child_sync_done(ipcio, buf, balance);
+  synchronize_time(buf->s_header.s_local_time);
 
+  for (timestamp_t t = history.s_history_len; t < get_lamport_time(); ++t)
+    record_history(&history,
+                   (BalanceState){.s_balance = balance, .s_time = t, .s_balance_pending_in = 0});
   buf->s_header.s_type = BALANCE_HISTORY;
   buf->s_header.s_payload_len = sizeof(BalanceHistory);
   *((BalanceHistory*)buf->s_payload) = history;
@@ -60,8 +71,8 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
 }
 
 void child_sync_started(IPCIO* ipcio, Message* buf, balance_t balance) {
-  ipc_ext_set_payload(buf, STARTED, log_started_fmt, 0, ipc_id(ipcio), getpid(),
-                      getppid(), balance);
+  ipc_ext_set_payload(buf, STARTED, 0, log_started_fmt, 0, ipc_id(ipcio), getpid(), getppid(),
+                      balance);
   if (send_multicast(ipcio, buf) != 0)
     log_panic(ipc_id(ipcio), "failed to broadcast the STARTED message\n");
   log_event(buf->s_payload);
@@ -70,8 +81,9 @@ void child_sync_started(IPCIO* ipcio, Message* buf, balance_t balance) {
 }
 
 void child_sync_done(IPCIO* ipcio, Message* buf, balance_t balance) {
-  ipc_ext_set_payload(buf, DONE, log_done_fmt, get_physical_time(),
-                      ipc_id(ipcio), balance);
+  advance_lamport_time();
+  timestamp_t time = get_lamport_time();
+  ipc_ext_set_payload(buf, DONE, time, log_done_fmt, time, ipc_id(ipcio), balance);
   if (send_multicast(ipcio, buf) != 0)
     log_panic(ipc_id(ipcio), "failed to broadcast the DONE message\n");
   log_event(buf->s_payload);
