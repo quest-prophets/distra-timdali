@@ -41,6 +41,9 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
           record_history(&history, (BalanceState){.s_balance = balance,
                                                   .s_time = recv_t,
                                                   .s_balance_pending_in = transfer->s_amount});
+          record_history(&history, (BalanceState){.s_balance = balance,
+                                                  .s_time = get_lamport_time(),
+                                                  .s_balance_pending_in = transfer->s_amount});
           log_eventf(log_transfer_out_fmt, get_lamport_time(), transfer->s_src, transfer->s_amount,
                      transfer->s_dst);
 

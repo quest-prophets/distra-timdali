@@ -12,4 +12,5 @@ void advance_lamport_time() {
 
 void synchronize_time(timestamp_t received_time) {
   lamport_time = received_time > lamport_time ? received_time : lamport_time;
+  lamport_time++;
 }
