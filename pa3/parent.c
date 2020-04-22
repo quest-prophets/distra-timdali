@@ -21,6 +21,7 @@ void transfer(void* parent_data, local_id src, local_id dst, balance_t amount) {
 
   send(ipcio, src, buf);
   receive_blocking(ipcio, dst, buf);
+  synchronize_time(buf->s_header.s_local_time);
   assert(buf->s_header.s_type == ACK);
 
   free(buf);

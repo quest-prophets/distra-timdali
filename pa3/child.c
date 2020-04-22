@@ -41,13 +41,13 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
           record_history(&history, (BalanceState){.s_balance = balance,
                                                   .s_time = recv_t,
                                                   .s_balance_pending_in = transfer->s_amount});
-          log_eventf(log_transfer_out_fmt, recv_t, transfer->s_src, transfer->s_amount,
+          log_eventf(log_transfer_out_fmt, get_lamport_time(), transfer->s_src, transfer->s_amount,
                      transfer->s_dst);
 
           send(ipcio, transfer->s_dst, buf);
         } else if (transfer->s_dst == ipc_id(ipcio)) {
           balance += transfer->s_amount;
-          log_eventf(log_transfer_in_fmt, recv_t, transfer->s_dst, transfer->s_amount,
+          log_eventf(log_transfer_in_fmt, get_lamport_time(), transfer->s_dst, transfer->s_amount,
                      transfer->s_src);
 
           buf->s_header.s_type = ACK;
@@ -64,14 +64,18 @@ void child_entry(IPCIO* ipcio, Message* buf, balance_t balance) {
   for (timestamp_t t = history.s_history_len; t < get_lamport_time(); ++t)
     record_history(&history,
                    (BalanceState){.s_balance = balance, .s_time = t, .s_balance_pending_in = 0});
-  buf->s_header.s_type = BALANCE_HISTORY;
+
+  advance_lamport_time();
+  ipc_ext_set_status(buf, BALANCE_HISTORY, get_lamport_time());
   buf->s_header.s_payload_len = sizeof(BalanceHistory);
   *((BalanceHistory*)buf->s_payload) = history;
   send(ipcio, PARENT_ID, buf);
 }
 
 void child_sync_started(IPCIO* ipcio, Message* buf, balance_t balance) {
-  ipc_ext_set_payload(buf, STARTED, 0, log_started_fmt, 0, ipc_id(ipcio), getpid(), getppid(),
+  advance_lamport_time();
+  timestamp_t time = get_lamport_time();
+  ipc_ext_set_payload(buf, STARTED, time, log_started_fmt, time, ipc_id(ipcio), getpid(), getppid(),
                       balance);
   if (send_multicast(ipcio, buf) != 0)
     log_panic(ipc_id(ipcio), "failed to broadcast the STARTED message\n");
