@@ -1,6 +1,8 @@
 #pragma once
 
-#include "banking.h"
+#include "ipc.h"
+
+timestamp_t get_lamport_time();
 
 void advance_lamport_time();
 
