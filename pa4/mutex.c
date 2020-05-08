@@ -1,22 +1,22 @@
 #include "mutex.h"
 #include "time.h"
 
+#include <assert.h>
 #include <stdlib.h>
 
 /* Request queue */
 
-#define QUEUE_LEN MAX_CHILDREN
-
-typedef struct EnqueuedRequest {
-  timestamp_t recv_t;
-  local_id process_id;
-} EnqueuedRequest;
+/* The queue is based on the follwing assumptions:
+ * - each process can send at most once request for the CS before releasing it
+ * - lamport clock starts at 1, so 0 can be reserved to indicate "no requests"
+ * - there's always at least one (own) request in the queue
+ */
 
 typedef struct {
-  EnqueuedRequest items[QUEUE_LEN];
+  timestamp_t ts[MAX_CHILDREN];
 } RequestQueue;
 
-EnqueuedRequest top_enqueued_request(const RequestQueue* q);
+local_id top_enqueued_request(const RequestQueue* q);
 
 void enqueue_request(RequestQueue* q, local_id from, timestamp_t t);
 
@@ -45,37 +45,26 @@ Mutex* mutex_init(IPCIO* ipcio) {
 
 /* Request queue */
 
-// Request queue is sorted by timestamp -- a tuple of (recv_t, process_id)
-uint32_t request_timestamp(EnqueuedRequest request) {
-  return (request.recv_t << 16) | request.process_id;
-}
+#define EMPTY_REQUEST_TIME 0
 
-#define EMPTY_REQUEST ((EnqueuedRequest){0, 0})
-#define EMPTY_TIMESTAMP request_timestamp(EMPTY_REQUEST)
-
-EnqueuedRequest top_enqueued_request(const RequestQueue* q) {
-  EnqueuedRequest head = EMPTY_REQUEST;
-  for (int i = 0; i < QUEUE_LEN; ++i) {
-    if (request_timestamp(q->items[i]) > request_timestamp(head))
-      head = q->items[i];
+local_id top_enqueued_request(const RequestQueue* q) {
+  local_id top_enqueued = 0;
+  timestamp_t top_enqueued_ts = q->ts[0];
+  for (int i = 0; i < MAX_CHILDREN; ++i) {
+    if (q->ts[i] > top_enqueued_ts) {
+      top_enqueued = i;
+      top_enqueued_ts = q->ts[i];
+    }
   }
-  return head;
+  return top_enqueued;
 }
 
 void enqueue_request(RequestQueue* q, local_id from, timestamp_t t) {
-  for (int i = 0; i < QUEUE_LEN; ++i) {
-    if (request_timestamp(q->items[i]) == EMPTY_TIMESTAMP) {
-      q->items[i] = (EnqueuedRequest){.process_id = from, .recv_t = t};
-      break;
-    }
-  }
+  assert(q->ts[from] == EMPTY_REQUEST_TIME);
+  q->ts[from] = t;
 }
 
 void release_request(RequestQueue* q, local_id from) {
-  for (int i = 0; i < QUEUE_LEN; ++i) {
-    if (q->items[i].process_id == from) {
-      q->items[i] = EMPTY_REQUEST;
-      break;
-    }
-  }
+  assert(q->ts[from] != EMPTY_REQUEST_TIME);
+  q->ts[from] = EMPTY_REQUEST_TIME;
 }
