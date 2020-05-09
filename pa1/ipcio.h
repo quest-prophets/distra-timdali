@@ -27,6 +27,10 @@ void ipc_receive_all_children_start(local_id* from);
 
 int ipc_receive_all_next(IPCIO* ipcio, local_id* from, Message* buf);
 
+int ipc_receive_any(IPCIO* ipcio, Message* buf, local_id* from);
+
+int ipc_multicast_to_children(IPCIO* ipcio, Message* buf);
+
 // Logging
 
 typedef void (*PipeIterator)(local_id dst, local_id from, int rd_fd, int wr_fd);

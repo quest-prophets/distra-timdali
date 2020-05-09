@@ -2,3 +2,4 @@
 .idea/
 pa[1-5]
 !pa[1-5]/
+.vscode/

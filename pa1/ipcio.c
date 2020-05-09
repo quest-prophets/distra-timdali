@@ -167,6 +167,23 @@ int ipc_receive_all_next(IPCIO* ipcio, local_id* from, Message* buf) {
   return receive_blocking(ipcio, *from, buf);
 }
 
+int ipc_receive_any(IPCIO* ipcio, Message* buf, local_id* from) {
+  for (*from = 0; *from <= ipcio->num_children; *from = *from + 1)
+    if (*from != ipcio->id && receive(ipcio, *from, buf) == 0)
+      return 0;
+
+  return -1;
+}
+
+int ipc_multicast_to_children(IPCIO* ipcio, Message* buf) {
+  int err = 0;
+  for (local_id dst = PARENT_ID + 1; dst <= ipcio->num_children; ++dst)
+    if (dst != ipcio->id && (err = send(ipcio, dst, buf)) != 0)
+      break;
+
+  return err;
+}
+
 void ipc_iterate_pipes(const IPCIO* ipcio, PipeIterator callback) {
   for (local_id dst = 0; dst <= ipcio->num_children; ++dst)
     for (local_id from = 0; from <= ipcio->num_children; ++from)

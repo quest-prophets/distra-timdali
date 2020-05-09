@@ -5,4 +5,8 @@
 
 typedef struct Mutex Mutex;
 
-Mutex* mutex_init(IPCIO* ipcio);
+#define NON_CS_MESSAGE_RECEIVED 1
+
+Mutex* mutex_init(IPCIO* ipcio, Message* buf, local_id num_children);
+
+int handle_cs_requests(Mutex* mux);

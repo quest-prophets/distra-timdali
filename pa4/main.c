@@ -14,6 +14,8 @@ void spawn_children(local_id num_children) {
   if (ipcio == NULL)
     log_panic(PARENT_ID, "failed to initialize IPC state");
 
+  ipc_use_nonblocking_io(ipcio);
+
   Message buf;
 
   log_init_events_log();
@@ -26,7 +28,7 @@ void spawn_children(local_id num_children) {
     if (fork_res == 0) {
       // inside child process
       ipc_set_up_child(ipcio, i);
-      child_entry(ipcio, &buf);
+      child_entry(ipcio, &buf, num_children);
       return;
     } else if (fork_res == -1) {
       log_panic(PARENT_ID, "failed to create child process");

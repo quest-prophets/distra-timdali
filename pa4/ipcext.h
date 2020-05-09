@@ -17,3 +17,5 @@ void ipc_ext_receive_all(IPCIO* ipcio,
 void ipc_ext_await_all_started(IPCIO* ipcio, Message* buf);
 
 void ipc_ext_await_all_done(IPCIO* ipcio, Message* buf);
+
+void ipc_ext_assert_message_type(IPCIO* ipcio, Message* buf, MessageType type);

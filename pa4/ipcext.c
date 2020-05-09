@@ -16,6 +16,7 @@ void ipc_ext_set_status(Message* buf, MessageType type, timestamp_t time) {
   buf->s_header.s_magic = MESSAGE_MAGIC;
   buf->s_header.s_type = type;
   buf->s_header.s_local_time = time;
+  buf->s_header.s_payload_len = 0;
 }
 
 void ipc_ext_set_payload(Message* buf, MessageType type, timestamp_t time, const char* fmt, ...) {
@@ -44,14 +45,7 @@ void ipc_ext_receive_all(IPCIO* ipcio,
     if (err != 0)
       log_panic(ipc_id(ipcio), "failed to read from process %d\n", from);
 
-    MessageType buf_type = buf->s_header.s_type;
-    if (buf_type != type)
-      log_panic(ipc_id(ipcio),
-                "received an unexpected message from process %d "
-                "(expected %d = %s, got %d = %s)\n",
-                from, type, MESSAGE_TYPE_STR[type], buf_type,
-                buf_type < MESSAGE_TYPE_CNT ? MESSAGE_TYPE_STR[buf_type]
-                                            : "<unknown>");
+    ipc_ext_assert_message_type(ipcio, buf, type);
 
     synchronize_time(buf->s_header.s_local_time);
 
@@ -68,4 +62,12 @@ void ipc_ext_await_all_started(IPCIO* ipcio, Message* buf) {
 void ipc_ext_await_all_done(IPCIO* ipcio, Message* buf) {
   ipc_ext_receive_all_type(ipcio, buf, DONE);
   log_eventf(log_received_all_done_fmt, buf->s_header.s_local_time, ipc_id(ipcio));
+}
+
+void ipc_ext_assert_message_type(IPCIO* ipcio, Message* buf, MessageType type) {
+  MessageType buf_type = buf->s_header.s_type;
+  if (buf_type != type)
+    log_panic(ipc_id(ipcio), "expected message of type %d = %s, got message of type %d = %s\n",
+              type, MESSAGE_TYPE_STR[type], buf_type,
+              buf_type < MESSAGE_TYPE_CNT ? MESSAGE_TYPE_STR[buf_type] : "<unknown>");
 }
