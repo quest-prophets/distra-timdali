@@ -1,5 +1,6 @@
 #include "child.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -9,7 +10,7 @@
 #include "pa2345.h"
 #include "time.h"
 
-void child_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
+void child_entry(IPCIO* ipcio, Message* buf, local_id num_children, bool mutexl) {
   Mutex* mutex = mutex_init(ipcio, buf, num_children);
   child_sync_started(ipcio, buf);
 
@@ -17,25 +18,31 @@ void child_entry(IPCIO* ipcio, Message* buf, local_id num_children) {
 
   int iterations_count = 5 * ipc_id(ipcio);
   for (int i = 1; i <= iterations_count; ++i) {
-    while (request_cs(mutex) == NON_CS_MESSAGE_RECEIVED) {
-      ipc_ext_assert_message_type(ipcio, buf, DONE);
-      awaiting_children--;
+    if (mutexl) {
+      while (request_cs(mutex) == NON_CS_MESSAGE_RECEIVED) {
+        ipc_ext_assert_message_type(ipcio, buf, DONE);
+        awaiting_children--;
+      }
     }
 
     char s[256];
     snprintf(s, 256, log_loop_operation_fmt, ipc_id(ipcio), i, iterations_count);
     print(s);
 
-    release_cs(mutex);
+    if (mutexl) {
+      release_cs(mutex);
+    }
   }
 
   Message* done_buf = malloc(sizeof(Message));
   child_send_done(ipcio, done_buf);
 
-  while (awaiting_children > 0) {
-    handle_cs_requests(mutex);
-    ipc_ext_assert_message_type(ipcio, buf, DONE);
-    awaiting_children--;
+  if (mutexl) {
+    while (awaiting_children > 0) {
+      handle_cs_requests(mutex);
+      ipc_ext_assert_message_type(ipcio, buf, DONE);
+      awaiting_children--;
+    }
   }
 
   // Log "process x has DONE ..."
