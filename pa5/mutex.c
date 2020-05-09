@@ -45,11 +45,11 @@ struct Mutex {
 int request_cs(const void* mutex) {
   Mutex* mux = (Mutex*)mutex;
   advance_lamport_time();
-  timestamp_t time = get_lamport_time();
+  timestamp_t own_request_time = get_lamport_time();
 
   if (!queue_contains(&mux->queue, ipc_id(mux->ipcio))) {
-    enqueue_request(&mux->queue, ipc_id(mux->ipcio), time);
-    ipc_ext_set_status(mux->buf, CS_REQUEST, time);
+    enqueue_request(&mux->queue, ipc_id(mux->ipcio), own_request_time);
+    ipc_ext_set_status(mux->buf, CS_REQUEST, own_request_time);
     if (ipc_multicast_to_children(mux->ipcio, mux->buf) != 0)
       log_panic(ipc_id(mux->ipcio), "failed to broadcast the CS_REQUEST message\n");
   }
@@ -63,19 +63,19 @@ int request_cs(const void* mutex) {
         mux->last_request_reply_count++;
       } else if (mux->buf->s_header.s_type == CS_REQUEST) {
         timestamp_t request_time = mux->buf->s_header.s_local_time;
-        enqueue_request(&mux->queue, from, request_time);
 
-        advance_lamport_time();
-        ipc_ext_set_status(mux->buf, CS_REPLY, get_lamport_time());
-        send(mux->ipcio, from, mux->buf);
-      } else if (mux->buf->s_header.s_type == CS_RELEASE) {
-        release_request(&mux->queue, from);
+        if (own_request_time < request_time || (own_request_time == request_time && ipc_id(mux->ipcio) < from)) {
+          enqueue_request(&mux->queue, from, request_time);
+        } else {
+          advance_lamport_time();
+          ipc_ext_set_status(mux->buf, CS_REPLY, get_lamport_time());
+          send(mux->ipcio, from, mux->buf);
+        }
       } else {
         return NON_CS_MESSAGE_RECEIVED;
       }
 
-      if (mux->last_request_reply_count == mux->num_children - 1 &&
-          top_enqueued_request(&mux->queue) == ipc_id(mux->ipcio))
+      if (mux->last_request_reply_count == mux->num_children - 1)
         break;
     }
   }
@@ -89,10 +89,15 @@ int release_cs(const void* mutex) {
 
   release_request(&mux->queue, ipc_id(mux->ipcio));
 
-  advance_lamport_time();
-  ipc_ext_set_status(mux->buf, CS_RELEASE, get_lamport_time());
-  if (ipc_multicast_to_children(mux->ipcio, mux->buf) != 0)
-    log_panic(ipc_id(mux->ipcio), "failed to broadcast the CS_RELEASE message\n");
+  for (int from = PARENT_ID + 1; from <= mux->num_children; ++from) {
+    if (queue_contains(&mux->queue, from)) {
+      release_request(&mux->queue, from);
+
+      advance_lamport_time();
+      ipc_ext_set_status(mux->buf, CS_REPLY, get_lamport_time());
+      send(mux->ipcio, from, mux->buf);
+    }
+  }
 
   return 0;
 }
@@ -103,14 +108,9 @@ int handle_cs_requests(Mutex* mux) {
     if (ipc_receive_any(mux->ipcio, mux->buf, &from) == 0) {
       synchronize_time(mux->buf->s_header.s_local_time);
       if (mux->buf->s_header.s_type == CS_REQUEST) {
-        timestamp_t request_time = mux->buf->s_header.s_local_time;
-        enqueue_request(&mux->queue, from, request_time);
-
         advance_lamport_time();
         ipc_ext_set_status(mux->buf, CS_REPLY, get_lamport_time());
         send(mux->ipcio, from, mux->buf);
-      } else if (mux->buf->s_header.s_type == CS_RELEASE) {
-        release_request(&mux->queue, from);
       } else {
         return NON_CS_MESSAGE_RECEIVED;
       }
