@@ -26,6 +26,8 @@ typedef struct {
 
 local_id top_enqueued_request(const RequestQueue* q);
 
+timestamp_t queue_lookup(const RequestQueue* q, local_id id);
+
 bool queue_contains(const RequestQueue* q, local_id from);
 
 void enqueue_request(RequestQueue* q, local_id from, timestamp_t t);
@@ -42,17 +44,24 @@ struct Mutex {
   int last_request_reply_count;
 };
 
+timestamp_t enqueue_own_request(Mutex* mux) {
+  if (queue_contains(&mux->queue, ipc_id(mux->ipcio)))
+    return queue_lookup(&mux->queue, ipc_id(mux->ipcio));
+
+  advance_lamport_time();
+  timestamp_t t = get_lamport_time();
+  enqueue_request(&mux->queue, ipc_id(mux->ipcio), t);
+
+  ipc_ext_set_status(mux->buf, CS_REQUEST, t);
+  if (ipc_multicast_to_children(mux->ipcio, mux->buf) != 0)
+    log_panic(ipc_id(mux->ipcio), "failed to broadcast the CS_REQUEST message\n");
+
+  return t;
+}
+
 int request_cs(const void* mutex) {
   Mutex* mux = (Mutex*)mutex;
-  advance_lamport_time();
-  timestamp_t own_request_time = get_lamport_time();
-
-  if (!queue_contains(&mux->queue, ipc_id(mux->ipcio))) {
-    enqueue_request(&mux->queue, ipc_id(mux->ipcio), own_request_time);
-    ipc_ext_set_status(mux->buf, CS_REQUEST, own_request_time);
-    if (ipc_multicast_to_children(mux->ipcio, mux->buf) != 0)
-      log_panic(ipc_id(mux->ipcio), "failed to broadcast the CS_REQUEST message\n");
-  }
+  timestamp_t own_request_time = enqueue_own_request(mux);
 
   while (1) {
     local_id from;
@@ -64,7 +73,8 @@ int request_cs(const void* mutex) {
       } else if (mux->buf->s_header.s_type == CS_REQUEST) {
         timestamp_t request_time = mux->buf->s_header.s_local_time;
 
-        if (own_request_time < request_time || (own_request_time == request_time && ipc_id(mux->ipcio) < from)) {
+        if (own_request_time < request_time ||
+            (own_request_time == request_time && ipc_id(mux->ipcio) < from)) {
           enqueue_request(&mux->queue, from, request_time);
         } else {
           advance_lamport_time();
@@ -142,8 +152,12 @@ local_id top_enqueued_request(const RequestQueue* q) {
   return top_enqueued_child + 1;
 }
 
+timestamp_t queue_lookup(const RequestQueue* q, local_id id) {
+  return q->ts[id - 1];
+}
+
 bool queue_contains(const RequestQueue* q, local_id from) {
-  return q->ts[from - 1] != EMPTY_REQUEST_TIME;
+  return queue_lookup(q, from) != EMPTY_REQUEST_TIME;
 }
 
 void enqueue_request(RequestQueue* q, local_id from, timestamp_t t) {
